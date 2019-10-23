@@ -72,7 +72,11 @@ func FetchViaObjectProxyCache(r *model.Request, client model.Client, apc *config
 
 	var cacheStatus = tc.LookupStatusKeyMiss
 
-	d, err := QueryCache(cache, key)
+	var byteRange string
+	if r.Headers["Range"] != nil && len(r.Headers["Range"]) != 0 {
+		byteRange = r.Headers.Get("Range")
+	}
+	d, err := QueryCache(cache, key, byteRange)
 	if err == nil {
 		d.CachingPolicy.IsFresh = !d.CachingPolicy.LocalDate.Add(time.Duration(d.CachingPolicy.FreshnessLifetime) * time.Second).Before(time.Now())
 		if !d.CachingPolicy.IsFresh {

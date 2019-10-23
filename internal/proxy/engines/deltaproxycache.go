@@ -104,7 +104,11 @@ func DeltaProxyCacheRequest(r *model.Request, w http.ResponseWriter, client mode
 			return // fetchTimeseries logs the error
 		}
 	} else {
-		doc, err = QueryCache(cache, key)
+		var byteRange string
+		if r.Headers["Range"] != nil && len(r.Headers["Range"]) != 0 {
+			byteRange = r.Headers.Get("Range")
+		}
+		doc, err = QueryCache(cache, key, byteRange)
 		if err != nil {
 			cts, doc, elapsed, err = fetchTimeseries(r, client)
 			if err != nil {

@@ -33,8 +33,9 @@ import (
 )
 
 // QueryCache queries the cache for an HTTPDocument and returns it
-func QueryCache(c cache.Cache, key string) (*model.HTTPDocument, error) {
+func QueryCache(c cache.Cache, key string, byteRangeStr string) (*model.HTTPDocument, error) {
 
+	var byteIndex []int
 	inflate := c.Configuration().Compression
 	if inflate {
 		key += ".sz"
@@ -42,6 +43,29 @@ func QueryCache(c cache.Cache, key string) (*model.HTTPDocument, error) {
 
 	d := &model.HTTPDocument{}
 	bytes, err := c.Retrieve(key, true)
+
+	// For HTTP range requests
+	if byteRangeStr != "" {
+		// Remove the word "Range: bytes="
+		byteRangeStr = byteRangeStr[13:]
+		byteRange := strings.Split(byteRangeStr, ",")
+		for _, b := range byteRange {
+			b = strings.TrimSpace(b)
+			startEnd := strings.Split(b, "-")
+			start, err := strconv.Atoi(startEnd[0])
+			if err != nil {
+				log.Error("Couldn't get a range", log.Pairs{"start": start})
+			}
+			end, err := strconv.Atoi(startEnd[1])
+			if err != nil {
+				log.Error("Couldn't get a range", log.Pairs{"end": end})
+			}
+			byteIndex = append(byteIndex, start)
+			byteIndex = append(byteIndex, end)
+		}
+	}
+	// Now, check to see if you can eliminate certain boundaries because of overlap
+
 	if err != nil {
 		return d, err
 	}
@@ -77,7 +101,6 @@ func WriteCache(c cache.Cache, key string, d *model.HTTPDocument, ttl time.Durat
 
 // DeriveCacheKey calculates a query-specific keyname based on the prometheus query in the user request
 func DeriveCacheKey(c model.Client, r *model.Request, apc *config.PathConfig, extra string) string {
-
 	pc := context.PathConfig(r.ClientRequest.Context())
 	if apc != nil {
 		pc = apc
@@ -96,6 +119,11 @@ func DeriveCacheKey(c model.Client, r *model.Request, apc *config.PathConfig, ex
 
 	// Append the http method to the map for creating the derived cache key
 	vals = append(vals, fmt.Sprintf("%s.%s.", "method", r.HTTPMethod))
+
+	// Check for range requests, delete if present
+	if r.Headers["Range"] != nil && len(r.Headers["Range"]) != 0 {
+		r.Headers.Del("Range")
+	}
 
 	if len(pc.CacheKeyParams) == 1 && pc.CacheKeyParams[0] == "*" {
 		for p := range params {
