@@ -34,8 +34,9 @@ import (
 
 // QueryCache queries the cache for an HTTPDocument and returns it
 func QueryCache(c cache.Cache, key string, byteRangeStr string) (*model.HTTPDocument, error) {
-
 	var byteIndex []int
+	var rangedBytes []byte
+
 	inflate := c.Configuration().Compression
 	if inflate {
 		key += ".sz"
@@ -63,8 +64,15 @@ func QueryCache(c cache.Cache, key string, byteRangeStr string) (*model.HTTPDocu
 			byteIndex = append(byteIndex, start)
 			byteIndex = append(byteIndex, end)
 		}
+		for i := 0; i < len(byteIndex)-1; i++ {
+			rangedBytes = append(rangedBytes, bytes[i:(i+1)]...)
+			i = i+1
+		}
+
+	} else {
+		rangedBytes = bytes
 	}
-	// Now, check to see if you can eliminate certain boundaries because of overlap
+	// ToDo: Now, check to see if you can eliminate certain boundaries because of overlap
 
 	if err != nil {
 		return d, err
@@ -72,12 +80,12 @@ func QueryCache(c cache.Cache, key string, byteRangeStr string) (*model.HTTPDocu
 
 	if inflate {
 		log.Debug("decompressing cached data", log.Pairs{"cacheKey": key})
-		b, err := snappy.Decode(nil, bytes)
+		b, err := snappy.Decode(nil, rangedBytes)
 		if err == nil {
-			bytes = b
+			rangedBytes = b
 		}
 	}
-	d.UnmarshalMsg(bytes)
+	d.UnmarshalMsg(rangedBytes)
 	return d, nil
 }
 
